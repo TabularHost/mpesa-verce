@@ -4,16 +4,15 @@
   <meta charset="UTF-8">
   <title>M-Pesa Payment</title>
   <style>
-    /* --- Reset & base styles --- */
     body {
       margin: 0;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: linear-gradient(135deg, #f9fafa, #f6f8f8);
-      color: #2d3436;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
+      color: #2d3436;
     }
 
     .container {
@@ -87,6 +86,10 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    .success { color: green; }
+    .failure { color: red; }
+    .info { color: #0984e3; }
   </style>
 </head>
 <body>
@@ -105,6 +108,7 @@
 
     async function pay() {
       msg.innerHTML = 'Sending STK push... <span class="spinner"></span>';
+      msg.className = "info";
 
       try {
         const response = await fetch("/api/pay", {
@@ -119,12 +123,14 @@
         } catch (err) {
           const text = await response.text();
           msg.textContent = "Server returned invalid response";
+          msg.className = "failure";
           console.error("Invalid JSON response:", text);
           return;
         }
 
         if (!data.success) {
           msg.textContent = "Error: " + (data.error || "Unknown error");
+          msg.className = "failure";
           console.error("STK Push error:", data);
           return;
         }
@@ -132,13 +138,16 @@
         poll(data.checkout_id);
 
       } catch (err) {
-        msg.textContent = "Network or server error.";
+        msg.textContent = "Network or server error: " + err.message;
+        msg.className = "failure";
         console.error("Fetch error:", err);
       }
     }
 
     function poll(id) {
       msg.innerHTML = 'Waiting for payment confirmation... <span class="spinner"></span>';
+      msg.className = "info";
+
       const t = setInterval(async () => {
         try {
           const r = await fetch("/api/status?id=" + id);
@@ -146,14 +155,17 @@
 
           if (statusData.status === "SUCCESS") {
             msg.textContent = "✅ Payment Successful: " + (statusData.resultDesc || "");
+            msg.className = "success";
             clearInterval(t);
           } else if (statusData.status === "FAILED") {
             msg.textContent = "❌ Payment Failed: " + (statusData.resultDesc || "");
+            msg.className = "failure";
             clearInterval(t);
           }
         } catch (err) {
           console.error("Polling error:", err);
           msg.textContent = "Error checking payment status.";
+          msg.className = "failure";
         }
       }, 3000);
     }
