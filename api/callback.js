@@ -1,29 +1,27 @@
 // /api/callback.js
-let payments = global.payments || {}; // same in-memory object
-global.payments = payments;
+global.payments = global.payments || {};
+let payments = global.payments;
 
 export default function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-  const callback = req.body;
+  if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method not allowed" });
 
   try {
-    const id = callback.Body.stkCallback.CheckoutRequestID;
-    const resultCode = callback.Body.stkCallback.ResultCode;
-    const resultDesc = callback.Body.stkCallback.ResultDesc;
+    const callback = req.body;
+    const stk = callback?.Body?.stkCallback;
 
-    if (!id) return res.status(400).json({ error: "Invalid callback" });
+    if (!stk) return res.status(400).json({ success: false, error: "Invalid callback body" });
 
-    payments[id] = {
-      status: resultCode === 0 ? "SUCCESS" : "FAILED",
-      resultDesc
-    };
+    const id = stk.CheckoutRequestID;
+    const resultCode = stk.ResultCode;
+    const resultDesc = stk.ResultDesc;
+
+    payments[id] = { status: resultCode === 0 ? "SUCCESS" : "FAILED", resultDesc };
 
     console.log("STK Callback received:", payments[id]);
 
-    res.json({ message: "Callback received" });
+    return res.status(200).json({ success: true, message: "Callback received" });
   } catch (err) {
     console.error("Callback error:", err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ success: false, error: "Server error" });
   }
 }
