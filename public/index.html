@@ -20,14 +20,14 @@
       padding: 40px 30px;
       border-radius: 20px;
       box-shadow: 0 15px 35px rgba(0,0,0,0.2);
-      width: 340px;
+      width: 360px;
       text-align: center;
     }
 
     h3 {
       margin-bottom: 25px;
       color: #0984e3;
-      font-size: 24px;
+      font-size: 26px;
     }
 
     input {
@@ -67,7 +67,8 @@
       margin-top: 20px;
       font-size: 16px;
       font-weight: bold;
-      min-height: 24px;
+      min-height: 28px;
+      word-wrap: break-word;
     }
 
     .spinner {
@@ -113,15 +114,15 @@
       try {
         const response = await fetch("/api/pay", {
           method: "POST",
-          headers: {"Content-Type":"application/json"},
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone: phone.value, amount: amount.value })
         });
 
+        const text = await response.text(); // read body only once
         let data;
         try {
-          data = await response.json();
+          data = JSON.parse(text);
         } catch (err) {
-          const text = await response.text();
           msg.textContent = "Server returned invalid response";
           msg.className = "failure";
           console.error("Invalid JSON response:", text);
