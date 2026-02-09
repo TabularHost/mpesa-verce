@@ -1,37 +1,29 @@
-import { readTransactions, writeTransactions } from "./store";
+// /api/callback.js
+let payments = global.payments || {}; // same in-memory object
+global.payments = payments;
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const callback = req.body;
+
   try {
-    const body = req.body || {};
+    const id = callback.Body.stkCallback.CheckoutRequestID;
+    const resultCode = callback.Body.stkCallback.ResultCode;
+    const resultDesc = callback.Body.stkCallback.ResultDesc;
 
-    if (!body.Body || !body.Body.stkCallback) {
-      console.warn("Callback accessed without valid M-Pesa payload");
-      return res.json({ success: true, message: "No callback data received" });
-    }
+    if (!id) return res.status(400).json({ error: "Invalid callback" });
 
-    const callback = body.Body.stkCallback;
-    const checkoutIdFromMpesa = callback.CheckoutRequestID;
-    const resultCode = callback.ResultCode;
-    const resultDesc = callback.ResultDesc;
+    payments[id] = {
+      status: resultCode === 0 ? "SUCCESS" : "FAILED",
+      resultDesc
+    };
 
-    const transactions = readTransactions();
-    let found = false;
+    console.log("STK Callback received:", payments[id]);
 
-    for (const id in transactions) {
-      if (transactions[id].mpesaCheckoutId === checkoutIdFromMpesa) {
-        transactions[id].status = resultCode === 0 ? "SUCCESS" : "FAILED";
-        transactions[id].resultDesc = resultDesc;
-        found = true;
-        console.log(`Transaction ${id} updated: ${transactions[id].status}`);
-      }
-    }
-
-    if (!found) console.warn("Callback received for unknown CheckoutRequestID:", checkoutIdFromMpesa);
-
-    writeTransactions(transactions);
-    res.json({ success: true });
+    res.json({ message: "Callback received" });
   } catch (err) {
-    console.error("Callback handler error:", err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("Callback error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 }

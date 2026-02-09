@@ -1,17 +1,13 @@
-import { readTransactions } from "./store";
+// /api/status.js
+let payments = global.payments || {}; // global so all serverless invocations can share in dev (sandbox only)
+global.payments = payments;
 
-export default async function handler(req, res) {
-  try {
-    const { id } = req.query;
-    if (!id) return res.json({ status: "UNKNOWN" });
+export default function handler(req, res) {
+  const id = req.query.id;
 
-    const transactions = readTransactions();
-    if (!transactions[id]) return res.json({ status: "UNKNOWN" });
-
-    const t = transactions[id];
-    res.json({ status: t.status, resultDesc: t.resultDesc || null });
-  } catch (err) {
-    console.error("Status handler error:", err);
-    res.status(500).json({ status: "ERROR", error: err.message });
+  if (!id || !payments[id]) {
+    return res.json({ status: "UNKNOWN" });
   }
+
+  res.json(payments[id]);
 }
