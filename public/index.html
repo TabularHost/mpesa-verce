@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>M-Pesa Payment</title>
+</head>
+<body>
+  <h3>M-Pesa Payment</h3>
+  <input id="phone" placeholder="2547XXXXXXXX"><br>
+  <input id="amount" type="number" placeholder="Amount"><br>
+  <button onclick="pay()">Pay</button>
+  <p id="msg"></p>
+
+<script>
+function pay() {
+  msg.textContent = "Sending STK push...";
+  fetch("/api/pay", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      phone: phone.value,
+      amount: amount.value
+    })
+  })
+  .then(r=>r.json())
+  .then(r=>{
+    if(!r.success) return msg.textContent = "Error";
+    poll(r.checkout_id);
+  });
+}
+
+function poll(id) {
+  const t = setInterval(()=>{
+    fetch("/api/status?id="+id)
+      .then(r=>r.json())
+      .then(r=>{
+        if(r.status==="SUCCESS"){ msg.textContent="✅ Paid"; clearInterval(t); }
+        if(r.status==="FAILED"){ msg.textContent="❌ Failed"; clearInterval(t); }
+      });
+  }, 3000);
+}
+</script>
+</body>
+</html>
