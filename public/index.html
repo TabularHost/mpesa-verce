@@ -1,44 +1,158 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>M-Pesa Payment</title>
+  <style>
+    /* --- Reset & base styles --- */
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #00b894, #55efc4);
+      color: #2d3436;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .container {
+      background: #ffffffcc;
+      padding: 40px 30px;
+      border-radius: 20px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+      width: 320px;
+      text-align: center;
+    }
+
+    h3 {
+      margin-bottom: 25px;
+      color: #0984e3;
+      font-size: 24px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 15px;
+      margin: 10px 0;
+      border-radius: 10px;
+      border: 1px solid #dfe6e9;
+      font-size: 16px;
+      transition: 0.3s;
+    }
+
+    input:focus {
+      border-color: #0984e3;
+      outline: none;
+      box-shadow: 0 0 8px rgba(0, 132, 227, 0.3);
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #0984e3;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background: #74b9ff;
+    }
+
+    #msg {
+      margin-top: 20px;
+      font-size: 16px;
+      font-weight: bold;
+      min-height: 24px;
+    }
+
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #0984e3;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-  <h3>M-Pesa Payment</h3>
-  <input id="phone" placeholder="2547XXXXXXXX"><br>
-  <input id="amount" type="number" placeholder="Amount"><br>
-  <button onclick="pay()">Pay</button>
-  <p id="msg"></p>
+  <div class="container">
+    <h3>M-Pesa Payment</h3>
+    <input id="phone" placeholder="2547XXXXXXXX">
+    <input id="amount" type="number" placeholder="Amount">
+    <button onclick="pay()">Pay</button>
+    <p id="msg"></p>
+  </div>
 
-<script>
-function pay() {
-  msg.textContent = "Sending STK push...";
-  fetch("/api/pay", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      phone: phone.value,
-      amount: amount.value
-    })
-  })
-  .then(r=>r.json())
-  .then(r=>{
-    if(!r.success) return msg.textContent = "Error";
-    poll(r.checkout_id);
-  });
-}
+  <script>
+    const msg = document.getElementById("msg");
+    const phone = document.getElementById("phone");
+    const amount = document.getElementById("amount");
 
-function poll(id) {
-  const t = setInterval(()=>{
-    fetch("/api/status?id="+id)
-      .then(r=>r.json())
-      .then(r=>{
-        if(r.status==="SUCCESS"){ msg.textContent="✅ Paid"; clearInterval(t); }
-        if(r.status==="FAILED"){ msg.textContent="❌ Failed"; clearInterval(t); }
-      });
-  }, 3000);
-}
-</script>
+    async function pay() {
+      msg.innerHTML = 'Sending STK push... <span class="spinner"></span>';
+
+      try {
+        const response = await fetch("/api/pay", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ phone: phone.value, amount: amount.value })
+        });
+
+        let data;
+        try {
+          data = await response.json();
+        } catch (err) {
+          msg.textContent = "Server returned invalid JSON.";
+          console.error("Invalid JSON response:", await response.text());
+          return;
+        }
+
+        if (!data.success) {
+          msg.textContent = "Error: " + (data.error || "Unknown error");
+          console.error("STK Push error:", data);
+          return;
+        }
+
+        poll(data.checkout_id);
+
+      } catch (err) {
+        msg.textContent = "Network or server error.";
+        console.error("Fetch error:", err);
+      }
+    }
+
+    function poll(id) {
+      const t = setInterval(async () => {
+        try {
+          const r = await fetch("/api/status?id=" + id);
+          const statusData = await r.json();
+
+          if (statusData.status === "SUCCESS") {
+            msg.textContent = "✅ Paid";
+            clearInterval(t);
+          } else if (statusData.status === "FAILED") {
+            msg.textContent = "❌ Failed";
+            clearInterval(t);
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+      }, 3000);
+    }
+  </script>
 </body>
 </html>
