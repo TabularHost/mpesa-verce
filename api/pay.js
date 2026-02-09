@@ -1,34 +1,31 @@
 const transactions = {};
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed" });
-  }
-
-  const { phone, amount } = req.body;
-
-  if (!phone || !amount) {
-    return res.status(400).json({ success: false, error: "Missing phone or amount" });
-  }
-
-  // --- Log incoming request and environment check ---
-  console.log("Received request:", { phone, amount });
-  console.log("Environment vars check:", {
-    key: !!process.env.CONSUMER_KEY,
-    secret: !!process.env.CONSUMER_SECRET,
-    shortcode: !!process.env.SHORTCODE,
-    passkey: !!process.env.PASSKEY,
-    callback: !!process.env.CALLBACK_URL
-  });
-
   try {
-    // --- 1️⃣ Generate OAuth token for production ---
-    const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
+    if (req.method !== "POST") {
+      return res.status(405).json({ success: false, error: "Method not allowed" });
+    }
 
-    const tokenRes = await fetch(
-      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
-      { headers: { Authorization: "Basic " + auth } }
-    );
+    const { phone, amount } = req.body || {};
+    if (!phone || !amount) {
+      return res.status(400).json({ success: false, error: "Missing phone or amount" });
+    }
+
+    // --- Check env vars ---
+    const missingVars = ["CONSUMER_KEY","CONSUMER_SECRET","SHORTCODE","PASSKEY","CALLBACK_URL"]
+      .filter(k => !process.env[k]);
+    if (missingVars.length) {
+      console.error("Missing env vars:", missingVars);
+      return res.status(500).json({ success: false, error: "Missing environment variables: " + missingVars.join(", ") });
+    }
+
+    console.log("Starting STK Push for:", phone, amount);
+
+    // --- Get OAuth token ---
+    const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
+    const tokenRes = await fetch("https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials", {
+      headers: { Authorization: "Basic " + auth }
+    });
 
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
@@ -38,8 +35,8 @@ export default async function handler(req, res) {
 
     const token = tokenData.access_token;
 
-    // --- 2️⃣ Prepare STK Push payload ---
-    const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
+    // --- Prepare STK push payload ---
+    const timestamp = new Date().toISOString().replace(/[-:T.]/g,"").slice(0,14);
     const password = Buffer.from(process.env.SHORTCODE + process.env.PASSKEY + timestamp).toString("base64");
 
     const payload = {
@@ -58,24 +55,29 @@ export default async function handler(req, res) {
 
     console.log("STK Push payload:", payload);
 
-    // --- 3️⃣ Send STK Push request to production URL ---
-    const stkRes = await fetch(
-      "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-      {
-        method: "POST",
-        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      }
-    );
+    // --- Send STK push ---
+    const stkRes = await fetch("https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
 
-    const stkData = await stkRes.json();
-    console.log("STK Push response:", stkData);
+    let stkData;
+    try {
+      stkData = await stkRes.json();
+    } catch(e) {
+      const text = await stkRes.text();
+      console.error("Invalid JSON from STK push:", text);
+      return res.status(500).json({ success: false, error: "Invalid JSON response from M-Pesa", raw: text });
+    }
+
+    console.log("STK push response:", stkData);
 
     if (stkData.ResponseCode !== "0") {
       return res.json({ success: false, error: stkData });
     }
 
-    // --- 4️⃣ Save transaction for polling ---
+    // --- Save transaction ---
     const checkout_id = Date.now().toString();
     transactions[checkout_id] = { status: "PENDING", mpesaCheckoutId: stkData.CheckoutRequestID };
 
