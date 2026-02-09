@@ -1,6 +1,4 @@
-import fetch from "node-fetch";
-
-const transactions = {}; // Temporary in-memory store
+const transactions = {};
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -13,26 +11,37 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: "Missing phone or amount" });
   }
 
+  // --- Log incoming request and environment check ---
+  console.log("Received request:", { phone, amount });
+  console.log("Environment vars check:", {
+    key: !!process.env.CONSUMER_KEY,
+    secret: !!process.env.CONSUMER_SECRET,
+    shortcode: !!process.env.SHORTCODE,
+    passkey: !!process.env.PASSKEY,
+    callback: !!process.env.CALLBACK_URL
+  });
+
   try {
-    // 1️⃣ Generate OAuth token directly
+    // --- 1️⃣ Generate OAuth token for production ---
     const auth = Buffer.from(`${process.env.CONSUMER_KEY}:${process.env.CONSUMER_SECRET}`).toString("base64");
+
     const tokenRes = await fetch(
-      "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
       { headers: { Authorization: "Basic " + auth } }
     );
-    const tokenData = await tokenRes.json();
 
+    const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      throw new Error("Failed to get OAuth token: " + JSON.stringify(tokenData));
+      console.error("Failed to get token:", tokenData);
+      return res.status(500).json({ success: false, error: "Failed to get OAuth token", details: tokenData });
     }
 
     const token = tokenData.access_token;
 
-    // 2️⃣ Generate STK Push password and timestamp
+    // --- 2️⃣ Prepare STK Push payload ---
     const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
     const password = Buffer.from(process.env.SHORTCODE + process.env.PASSKEY + timestamp).toString("base64");
 
-    // 3️⃣ Build payload
     const payload = {
       BusinessShortCode: process.env.SHORTCODE,
       Password: password,
@@ -43,27 +52,30 @@ export default async function handler(req, res) {
       PartyB: process.env.SHORTCODE,
       PhoneNumber: phone,
       CallBackURL: process.env.CALLBACK_URL,
-      AccountReference: "TestPayment",
+      AccountReference: "Payment",
       TransactionDesc: "Payment"
     };
 
-    // 4️⃣ Send STK Push
-    const stkRes = await fetch("https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + token,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
+    console.log("STK Push payload:", payload);
+
+    // --- 3️⃣ Send STK Push request to production URL ---
+    const stkRes = await fetch(
+      "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
 
     const stkData = await stkRes.json();
+    console.log("STK Push response:", stkData);
 
     if (stkData.ResponseCode !== "0") {
       return res.json({ success: false, error: stkData });
     }
 
-    // 5️⃣ Save transaction for polling
+    // --- 4️⃣ Save transaction for polling ---
     const checkout_id = Date.now().toString();
     transactions[checkout_id] = { status: "PENDING", mpesaCheckoutId: stkData.CheckoutRequestID };
 
