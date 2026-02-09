@@ -14,7 +14,6 @@
       height: 100vh;
       color: #2d3436;
     }
-
     .container {
       background: #ffffffcc;
       padding: 40px 30px;
@@ -23,71 +22,14 @@
       width: 360px;
       text-align: center;
     }
-
-    h3 {
-      margin-bottom: 25px;
-      color: #0984e3;
-      font-size: 26px;
-    }
-
-    input {
-      width: 100%;
-      padding: 12px 15px;
-      margin: 10px 0;
-      border-radius: 10px;
-      border: 1px solid #dfe6e9;
-      font-size: 16px;
-      transition: 0.3s;
-    }
-
-    input:focus {
-      border-color: #0984e3;
-      outline: none;
-      box-shadow: 0 0 8px rgba(0, 132, 227, 0.3);
-    }
-
-    button {
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 10px;
-      background: #0984e3;
-      color: white;
-      font-size: 18px;
-      cursor: pointer;
-      transition: 0.3s;
-      margin-top: 10px;
-    }
-
-    button:hover {
-      background: #74b9ff;
-    }
-
-    #msg {
-      margin-top: 20px;
-      font-size: 16px;
-      font-weight: bold;
-      min-height: 28px;
-      word-wrap: break-word;
-    }
-
-    .spinner {
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #0984e3;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      animation: spin 1s linear infinite;
-      display: inline-block;
-      vertical-align: middle;
-      margin-left: 10px;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
+    h3 { margin-bottom: 25px; color: #0984e3; font-size: 26px; }
+    input { width: 100%; padding: 12px 15px; margin: 10px 0; border-radius: 10px; border: 1px solid #dfe6e9; font-size: 16px; }
+    input:focus { border-color: #0984e3; outline: none; box-shadow: 0 0 8px rgba(0, 132, 227, 0.3); }
+    button { width: 100%; padding: 12px; border: none; border-radius: 10px; background: #0984e3; color: white; font-size: 18px; cursor: pointer; margin-top: 10px; }
+    button:hover { background: #74b9ff; }
+    #msg { margin-top: 20px; font-size: 16px; font-weight: bold; min-height: 28px; word-wrap: break-word; }
+    .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #0984e3; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-left: 10px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .success { color: green; }
     .failure { color: red; }
     .info { color: #0984e3; }
@@ -118,31 +60,25 @@
           body: JSON.stringify({ phone: phone.value, amount: amount.value })
         });
 
-        const text = await response.text(); // read body only once
         let data;
-        try {
-          data = JSON.parse(text); // attempt JSON parse
-        } catch (err) {
-          msg.textContent = "Payment failed: server returned invalid response";
+        try { data = await response.json(); }
+        catch { 
+          msg.textContent = "Payment failed: invalid server response";
           msg.className = "failure";
-          console.error("Invalid JSON response from backend:", text);
+          console.error("Invalid JSON from backend");
           return;
         }
 
         if (!data.success) {
-          // Show backend error or raw M-Pesa error if present
           msg.textContent = "Payment error: " + (data.error || JSON.stringify(data));
           msg.className = "failure";
-          console.error("STK Push error:", data);
           return;
         }
 
         poll(data.checkout_id);
-
       } catch (err) {
-        msg.textContent = "Network or server error: " + err.message;
+        msg.textContent = "Network/server error: " + err.message;
         msg.className = "failure";
-        console.error("Fetch error:", err);
       }
     }
 
@@ -165,9 +101,9 @@
             clearInterval(t);
           }
         } catch (err) {
-          console.error("Polling error:", err);
           msg.textContent = "Error checking payment status: " + err.message;
           msg.className = "failure";
+          clearInterval(t);
         }
       }, 3000);
     }
