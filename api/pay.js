@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     const CALLBACK_URL = process.env.CALLBACK_URL;
 
     const missingVars = [CONSUMER_KEY, CONSUMER_SECRET, SHORTCODE, PASSKEY, CALLBACK_URL]
-      .map((v,i)=>v ? null : ["CONSUMER_KEY","CONSUMER_SECRET","SHORTCODE","PASSKEY","CALLBACK_URL"][i])
+      .map((v, i) => v ? null : ["CONSUMER_KEY","CONSUMER_SECRET","SHORTCODE","PASSKEY","CALLBACK_URL"][i])
       .filter(Boolean);
 
     if (missingVars.length) {
@@ -34,7 +34,16 @@ export default async function handler(req, res) {
     const tokenRes = await fetch("https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials", {
       headers: { Authorization: "Basic " + auth }
     });
-    const tokenData = await tokenRes.json();
+
+    let tokenData;
+    try {
+      tokenData = await tokenRes.json();
+    } catch (e) {
+      const text = await tokenRes.text();
+      console.error("Invalid JSON from OAuth token:", text);
+      return res.status(500).json({ success: false, error: "Invalid OAuth token response", raw: text });
+    }
+
     if (!tokenData.access_token) {
       console.error("Failed to get token:", tokenData);
       return res.status(500).json({ success: false, error: "Failed to get OAuth token", details: tokenData });
@@ -43,7 +52,7 @@ export default async function handler(req, res) {
     const token = tokenData.access_token;
 
     // --- Prepare STK push payload ---
-    const timestamp = new Date().toISOString().replace(/[-:T.]/g,"").slice(0,14);
+    const timestamp = new Date().toISOString().replace(/[-:TZ.]/g,"").slice(0,14);
     const password = Buffer.from(SHORTCODE + PASSKEY + timestamp).toString("base64");
 
     const payload = {
@@ -69,13 +78,13 @@ export default async function handler(req, res) {
       body: JSON.stringify(payload)
     });
 
+    const rawResponse = await stkRes.text(); // read body once
     let stkData;
     try {
-      stkData = await stkRes.json();
-    } catch(e) {
-      const text = await stkRes.text();
-      console.error("Invalid JSON from STK push:", text);
-      return res.status(500).json({ success: false, error: "Invalid JSON from M-Pesa", raw: text });
+      stkData = JSON.parse(rawResponse);
+    } catch (e) {
+      console.error("Invalid JSON from STK push:", rawResponse);
+      return res.status(500).json({ success: false, error: "Invalid JSON from M-Pesa", raw: rawResponse });
     }
 
     console.log("STK push response:", stkData);
