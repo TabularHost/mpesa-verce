@@ -121,16 +121,17 @@
         const text = await response.text(); // read body only once
         let data;
         try {
-          data = JSON.parse(text);
+          data = JSON.parse(text); // attempt JSON parse
         } catch (err) {
-          msg.textContent = "Server returned invalid response";
+          msg.textContent = "Payment failed: server returned invalid response";
           msg.className = "failure";
-          console.error("Invalid JSON response:", text);
+          console.error("Invalid JSON response from backend:", text);
           return;
         }
 
         if (!data.success) {
-          msg.textContent = "Error: " + (data.error || "Unknown error");
+          // Show backend error or raw M-Pesa error if present
+          msg.textContent = "Payment error: " + (data.error || JSON.stringify(data));
           msg.className = "failure";
           console.error("STK Push error:", data);
           return;
@@ -165,7 +166,7 @@
           }
         } catch (err) {
           console.error("Polling error:", err);
-          msg.textContent = "Error checking payment status.";
+          msg.textContent = "Error checking payment status: " + err.message;
           msg.className = "failure";
         }
       }, 3000);
