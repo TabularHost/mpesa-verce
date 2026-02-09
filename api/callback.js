@@ -1,25 +1,24 @@
-import { transactions } from "./pay";
+import { readTransactions, writeTransactions } from "./store";
 
 export default async function handler(req, res) {
   try {
-    const body = req.body;
+    const body = req.body || {};
 
-    console.log("Received M-Pesa callback:", JSON.stringify(body, null, 2));
-
-    const callback = body.Body?.stkCallback;
-    if (!callback) {
-      console.error("Invalid callback structure");
-      return res.status(400).json({ success: false, error: "Invalid callback structure" });
+    if (!body.Body || !body.Body.stkCallback) {
+      console.warn("Callback accessed without valid M-Pesa payload");
+      return res.json({ success: true, message: "No callback data received" });
     }
 
-    const checkoutId = callback.CheckoutRequestID;
+    const callback = body.Body.stkCallback;
+    const checkoutIdFromMpesa = callback.CheckoutRequestID;
     const resultCode = callback.ResultCode;
     const resultDesc = callback.ResultDesc;
 
-    // Find the transaction in memory
+    const transactions = readTransactions();
     let found = false;
+
     for (const id in transactions) {
-      if (transactions[id].mpesaCheckoutId === checkoutId) {
+      if (transactions[id].mpesaCheckoutId === checkoutIdFromMpesa) {
         transactions[id].status = resultCode === 0 ? "SUCCESS" : "FAILED";
         transactions[id].resultDesc = resultDesc;
         found = true;
@@ -27,11 +26,10 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!found) {
-      console.warn("Callback received for unknown CheckoutRequestID:", checkoutId);
-    }
+    if (!found) console.warn("Callback received for unknown CheckoutRequestID:", checkoutIdFromMpesa);
 
-    res.status(200).json({ success: true });
+    writeTransactions(transactions);
+    res.json({ success: true });
   } catch (err) {
     console.error("Callback handler error:", err);
     res.status(500).json({ success: false, error: err.message });
